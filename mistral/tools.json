@@ -1,0 +1,19 @@
+[
+    {
+      "type": "function",
+      "function": {
+        "name": "get_definition",
+        "description": "Get the definition from an italian word of a dictionary",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "word": {
+              "type": "string",
+              "description": "The word to get the definition for."
+            }
+          },
+          "required": ["word"]
+        }
+      }
+    }
+]
