@@ -1,4 +1,5 @@
 import sqlite3
+import random
 
 def create_connection():
     conn = None;
@@ -9,26 +10,16 @@ def create_connection():
     return conn
 
 def check_words(input_string):
-    # Tokenize the input string into words
     words = set(input_string.split(" "))
-
-    # Create a cursor and execute a query to retrieve the words from the database
     cursor = conn.cursor()
     cursor.execute("SELECT word FROM dictionary")
     db_words = set([row[0] for row in cursor])
-
-    # Find the intersection of the input words and the database words
     italian_words = words & db_words
 
-    # Update the 'covered' column for the matching words
     for word in italian_words:
         cursor.execute("UPDATE dictionary SET covered = 'yes' WHERE word = ?", (word,))
 
-    # Commit the changes and close the connection
     conn.commit()
-    conn.close()
-
-    # Return the number of Italian words found
     return len(italian_words)
 
 def get_definition(word):
@@ -46,5 +37,28 @@ def get_definition(word):
     except sqlite3.Error as e:
         print(f"Error: {e}")
         return None
+    
+def get_random_word():
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, word
+        FROM dictionary
+        ORDER BY RANDOM()
+        LIMIT 1;
+    """)
+    row = cursor.fetchone()
+
+    if not row:
+        return None
+
+    idx, word = row
+    cursor.execute("""
+        UPDATE dictionary
+        SET covered = 'yes'
+        WHERE id = ?;
+    """, (idx,))
+
+    conn.commit()
+    return f"Retrieved word for italian vocab training: {word}"
 
 conn = create_connection()

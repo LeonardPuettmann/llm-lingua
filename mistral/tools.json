@@ -15,5 +15,13 @@
           "required": ["word"]
         }
       }
+    },
+    {
+        "type": "function",
+        "function": {
+          "name": "get_random_word",
+          "description": "Retrieves a random word from the dictionary of italian words for vocab training.",
+          "parameters": {}
+        }
     }
 ]
