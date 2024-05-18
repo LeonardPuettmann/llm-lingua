@@ -1,18 +1,16 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+import os
+import sys
+import json
 from mistralai.client import MistralClient
 from mistralai.models.chat_completion import ChatMessage
-import os
-import json
-
-# Load available tools
-with open('./mistral/tools.json') as f:
-    tools = json.load(f)
+import functools
+from mistral.tools import get_definition, get_random_word
+from colorama import Fore, Style
 
 # Settings for the Mistral LLM
 api_key = os.environ["MISTRAL_API_KEY"]
 if not api_key:
-    api_key = input("Please input your Mistral AI key: ")
+    api_key = input(Fore.YELLOW + "Please input your Mistral AI key: " + Style.RESET_ALL)
 client = MistralClient(api_key=api_key)
 
 model = "mistral-large-latest"
@@ -20,14 +18,30 @@ temperature = 0.0
 top_p = 1
 max_tokens = 1024
 
-app = Flask(__name__)
-CORS(app)  # This will enable CORS for all routes
+system_message = """
+You are an AI assistant by Mistral AI. Your job is to help with language learning, specifically Italian. 
+You are fluent in both english and italian. 
+The user is aware of the functions you can call, so please do not mention them to the user. 
+Be friendly and helpful.
+""".strip()
 
-@app.route('/ask', methods=['POST'])
-def ask():
-    data = request.get_json()
-    question = data['question']
-    messages = [ChatMessage(role="user", content=question)]
+messages = [
+    ChatMessage(role="system", content=system_message)
+]
+
+# Load available tools
+with open('./mistral/tools.json') as f:
+    tools = json.load(f)
+
+names_to_functions = {
+    "get_definition": functools.partial(get_definition),
+    "get_random_word": functools.partial(get_random_word)
+}
+
+def send_message(message):
+    global messages
+    messages.clear()
+    messages.append(ChatMessage(role="user", content=message))
 
     model_params = {
         "model": model,
@@ -39,14 +53,45 @@ def ask():
         "tool_choice": "auto"
     }
 
-    response_messages = []
-
     for response in client.chat_stream(**model_params):
-        # If the response is not a tool call, add it to the response_messages list
+
+        # If the response is not a tool call, print out the response
         if response.choices[0].delta.tool_calls is None:
-            response_messages.append(response.choices[0].delta.content)
+            print(response.choices[0].delta.content, end="")
+            sys.stdout.flush()
 
-    return jsonify({"answer": "\n".join(response_messages)})
+        # If response is a tool call, apply tool call and add to message
+        elif response.choices[0].delta.tool_calls:
+            tool_call = response.choices[0].delta.tool_calls[0]
+            print(tool_call)
+            function_name = tool_call.function.name
+            function_params = json.loads(tool_call.function.arguments)
 
-if __name__ == '__main__':
-    app.run(host='localhost', port=8765)
+            # Execute the function
+            function_result = names_to_functions[function_name](**function_params)
+            print(function_result)
+
+            # Create a new user message with the function result
+            new_message = ChatMessage(role="user", content=function_result)
+            messages.append(new_message)
+            print(messages)
+
+            # Send the new message back to the Mistral model
+            for response in client.chat_stream(model=model, messages=messages):
+                print(response.choices[0].delta.content, end="")
+                sys.stdout.flush()
+
+def main():
+    print(Fore.YELLOW + "Welcome to the terminal chatbot! Type your message and press enter." + Style.RESET_ALL)
+    while True:
+        try:
+            print("\n")
+            user_input = input("\n" + Fore.YELLOW + "You: " + Style.RESET_ALL)
+            print("\n")
+            send_message(user_input)
+        except KeyboardInterrupt:
+            print("\nExiting...")
+            sys.exit(0)
+
+if __name__ == "__main__":
+    main()
